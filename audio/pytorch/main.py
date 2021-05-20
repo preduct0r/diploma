@@ -62,10 +62,7 @@ def train(args):
     hdf5_path = os.path.join(workspace, 'features_ramas', 'waveform_meta_test.h5')
     # hdf5_path = os.path.join(workspace, 'features', 'waveform.h5')
 
-    checkpoints_dir = os.path.join(workspace, 'checkpoints', filename, 
-        'holdout_fold={}'.format(holdout_fold), model_type, 'pretrain={}'.format(pretrain), 
-        'loss_type={}'.format(loss_type), 'augmentation={}'.format(augmentation),
-         'batch_size={}'.format(batch_size), 'freeze_base={}'.format(freeze_base))
+    checkpoints_dir = os.path.join(workspace, 'checkpoints')
     create_folder(checkpoints_dir)
 
     statistics_path = os.path.join(workspace, 'statistics', filename, 
@@ -101,15 +98,6 @@ def train(args):
         logging.info('Load pretrained model from {}'.format(pretrained_checkpoint_path))
         model.load_from_pretrain(pretrained_checkpoint_path)
 
-    if resume_iteration:
-        resume_checkpoint_path = os.path.join(checkpoints_dir, '{}_iterations.pth'.format(resume_iteration))
-        logging.info('Load resume model from {}'.format(resume_checkpoint_path))
-        resume_checkpoint = torch.load(resume_checkpoint_path)
-        model.load_state_dict(resume_checkpoint['model'])
-        statistics_container.load_state_dict(resume_iteration)
-        iteration = resume_checkpoint['iteration']
-    else:
-        iteration = 0
 
     # Parallel
     print('GPU number: {}'.format(torch.cuda.device_count()))
@@ -117,21 +105,10 @@ def train(args):
 
     dataset = GtzanDataset()
 
-    # Data generator
-    train_sampler = TrainSampler(
-        hdf5_path=hdf5_path, 
-        holdout_fold=holdout_fold, 
-        batch_size=batch_size * 2 if 'mixup' in augmentation else batch_size)
-
     validate_sampler = EvaluateSampler(
         hdf5_path=hdf5_path, 
         holdout_fold=holdout_fold, 
-        batch_size=batch_size)
-
-    # Data loader
-    train_loader = torch.utils.data.DataLoader(dataset=dataset, 
-        batch_sampler=train_sampler, collate_fn=collate_fn,
-        num_workers=num_workers, pin_memory=True)
+        batch_size=1)
 
     validate_loader = torch.utils.data.DataLoader(dataset=dataset, 
         batch_sampler=validate_sampler, collate_fn=collate_fn, 
@@ -140,33 +117,16 @@ def train(args):
     if 'cuda' in device:
         model.to(device)
 
-     
     # Evaluator
     evaluator = Evaluator(model=model)
     
-    train_bgn_time = time.time()
     torch.manual_seed(729720439)
-    best_score = 0.53
 
-
-
-    logging.info('------------------------------------')
-    logging.info('Iteration: {}'.format(iteration))
-
-    train_fin_time = time.time()
-
-    statistics, _ = evaluator.evaluate(validate_loader)
+    statistics, clipwise_output = evaluator.evaluate(validate_loader)
     logging.info('Validate precision: {:.3f}'.format(statistics['precision']))
     logging.info('Validate recall: {:.3f}'.format(statistics['recall']))
     logging.info('Validate f_score: {:.3f}'.format(statistics['f_score']))
     logging.info('\n'+ str(statistics['cm']))
-
-    train_bgn_time = time.time()
-
-
-        
-
-        
 
 
 
@@ -196,6 +156,5 @@ if __name__ == '__main__':
 
     if args.mode == 'train':
         train(args)
-
     else:
         raise Exception('Error argument!')

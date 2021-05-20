@@ -200,4 +200,6 @@ class Transfer_Cnn14(nn.Module):
         clipwise_output = torch.softmax(self.fc_transfer(embedding), dim=-1)
         output_dict['clipwise_output2'] = clipwise_output
 
+
+
         return output_dict
