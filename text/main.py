@@ -101,7 +101,7 @@ config = AutoConfig.from_pretrained(
 best_model_path = "/home/den/PycharmProjects/diploma/text/1_0.8945538818076477_sentim.pt"
 
 model = AutoModelForSequenceClassification.from_pretrained(
-    args.model_name_or_path,
+    best_model_path,
     config=config
 )
 
