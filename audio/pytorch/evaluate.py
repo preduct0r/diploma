@@ -54,4 +54,4 @@ class Evaluator(object):
 
         statistics = {'precision': precision, 'recall':recall, 'f_score':f_score, 'cm':cm}
 
-        return statistics, output_dict['clipwise_output2']
+        return statistics, output_dict

@@ -122,11 +122,22 @@ def train(args):
     
     torch.manual_seed(729720439)
 
-    statistics, clipwise_output = evaluator.evaluate(validate_loader)
+    statistics, output_dict = evaluator.evaluate(validate_loader)
     logging.info('Validate precision: {:.3f}'.format(statistics['precision']))
     logging.info('Validate recall: {:.3f}'.format(statistics['recall']))
     logging.info('Validate f_score: {:.3f}'.format(statistics['f_score']))
     logging.info('\n'+ str(statistics['cm']))
+
+    df_audio = pd.read_csv('/home/den/DATASETS/AUDIO/preprocessed/ramas/meta_test.csv')
+    df_audio = df_audio[df_audio['cur_label'].isin(['ang', 'hap', 'sad', 'neu'])]
+
+    temp_df = pd.DataFrame(columns=['audio_name', 'hap', 'ang', 'sad', 'neu'])
+    temp_df['cur_name'] = output_dict['audio_name']
+    temp_df.loc[:, ['hap', 'ang', 'sad', 'neu']] = np.vstack(output_dict['clipwise_output2'])
+
+    concat_df = pd.concat([df_audio, temp_df], axis=1)
+
+
 
 
 
