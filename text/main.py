@@ -10,6 +10,7 @@ import numpy as np
 import scipy
 from tqdm import tqdm
 from telegram_bot import telegram_bot_sendtext
+import pandas as pd
 
 
 def preprocess_text(text: str) -> str:
@@ -39,8 +40,7 @@ args = argparse.Namespace(
     config_name = "/home/den/MODELS/ru_conversational_cased_L-12_H-768_A-12",
     tokenizer_name = "/home/den/MODELS/ru_conversational_cased_L-12_H-768_A-12",
     model_name_or_path = "/home/den/MODELS/ru_conversational_cased_L-12_H-768_A-12",
-    train_data = "/home/den/DATASETS/TEXT/fns_and_beeline_stratified/20cl_train_stratified.json",
-    test_data = "/home/den/DATASETS/TEXT/fns_and_beeline_stratified/20cl_test_stratified.json",
+    test_data = "/home/den/PycharmProjects/diploma/text/asr_data/ramaz_asr_simple.csv",
     cache_dir = "cache_dir",
     device = "cuda",
     epochs = 1,
@@ -55,110 +55,76 @@ class ClassierDataset(Dataset):
     def __init__(self, data_path, tokenizer, device="cuda", maxlen=128):
         self.tokenizer = tokenizer
         self.device = device
-        self._labels = []
         self._maxlen = maxlen
         self._data = self._read_data(data_path)
 
     def _read_data(self, data_path):
         data = []
-        src_data = json.load(open(data_path))
+        src_data = pd.read_csv(open(data_path))
 
-        for item in src_data:
-            self._labels += [item["classId"]]
-            for sample in item["samples"]:
-                sample = tokenizer.encode(preprocess_text(sample))
+        for item in src_data['chunk']:
+            sample = tokenizer.encode(preprocess_text(item))
 
-                if len(sample) < self._maxlen:
-                    sample += (self._maxlen - len(sample)) * tokenizer.encode("[PAD]", add_special_tokens=False)
-                else:
-                    sample = sample[:self._maxlen]
+            if len(sample) < self._maxlen:
+                sample += (self._maxlen - len(sample)) * tokenizer.encode("[PAD]", add_special_tokens=False)
+            else:
+                sample = sample[:self._maxlen]
 
-                data += [{"y": self._labels.index(item["classId"]), "x": sample}]
+            data += [{"chunk": item, "x": sample}]
 
         return data
 
     def __getitem__(self, index):
-        item = self._data[index]
+        sample = self._data[index]
 
-        return {"y": torch.tensor(item["y"]).to(self.device), "x": torch.tensor(item["x"]).to(self.device)}
+        return {"chunk": sample["chunk"], "x": torch.tensor(sample["x"]).to(self.device)}
 
     def __len__(self):
         return len(self._data)
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
 )
 
-dataset = ClassierDataset(args.train_data, tokenizer, device=args.device, maxlen = args.maxlen)
-dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
-
-
-
 test_dataset = ClassierDataset(args.test_data, tokenizer, device=args.device, maxlen = args.maxlen)
 test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-
-
-num_labels = len(dataset._labels)
-
-# test_data = torch.tensor(test_data)
+#TODO хардкод, печально, но как без него(для тональности плевать впринципе)
+num_labels = 2
 
 config = AutoConfig.from_pretrained(
     args.config_name if args.config_name else args.model_name_or_path,
     num_labels=num_labels
 )
 
+best_model_path = "/home/den/PycharmProjects/diploma/text/1_0.8945538818076477_sentim.pt"
+
 model = AutoModelForSequenceClassification.from_pretrained(
     args.model_name_or_path,
-    from_tf=bool(".ckpt" in args.model_name_or_path),
     config=config
 )
 
 model = model.to(args.device)
 
+model.eval()
+preds, chunks = [], []
 
-optimizer = optim.Adam(model.parameters(), lr=args.lr)
-scheduler = get_linear_schedule_with_warmup(
-    optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=len(dataset)
-)
+for batch in tqdm(test_dataloader, desc='Evaluating'):
+    output = model(batch["x"])
+    preds.append(output['logits'].detach().cpu().numpy().squeeze().tolist())
+    chunks += batch["chunk"]
 
-best_acc = 0
-best_epoch = 0
-for epoch in range(args.epochs):
-    model.train()
-    for batch in tqdm(dataloader, desc='Training'):
-        optimizer.zero_grad()
+temp_df = pd.DataFrame(columns=["chunk", "pos", "neg"])
+temp_df["chunk"] = chunks
+temp_df.loc[:,["pos", "neg"]] = np.vstack(preds)
 
-        loss, logits = model(input_ids=batch["x"], labels=batch["y"], return_dict=False)
-        loss.backward()
+asr_simple = pd.read_csv(open(args.test_data))
 
-        if args.clip > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+merge_df = pd.merge(asr_simple, temp_df, on='cur_name', how='outer')
+merge_df.to_csv('/home/den/Documents/diploma/asr_yandex/bert_inference.csv', index=False)
 
-        optimizer.step()
-        scheduler.step()
 
-    model.eval()
-    preds, targets = [], []
 
-    for batch in tqdm(test_dataloader, desc='Evaluating'):
-        output = model(batch["x"])
-        preds += [output[0][0].argmax(0).item()]
-        targets += batch["y"].detach().cpu()
-        
-    acc = accuracy_score(targets, preds)
-    print(f"Current accuracy: {acc}")
 
-    if acc > best_acc:
-        best_acc = acc
-        best_epoch = epoch
-
-        # torch.save({
-        #     'epoch': epoch,
-        #     'model_state_dict': model.state_dict(),
-        #     'acc': acc
-        # }, f"outdir/{epoch}_{acc}_sentim.pt")
-
-print(f"Best Epoch: {best_epoch} Best Acc: {best_acc}")
-telegram_bot_sendtext("Обучение берта закончилось!")
 
