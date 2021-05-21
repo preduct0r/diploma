@@ -121,7 +121,7 @@ temp_df.loc[:,["pos", "neg"]] = np.vstack(preds)
 
 asr_simple = pd.read_csv(open(args.test_data))
 
-merge_df = pd.merge(asr_simple, temp_df, on='cur_name', how='outer')
+merge_df = pd.merge(asr_simple, temp_df, on='chunk', how='inner')
 merge_df.to_csv('/home/den/Documents/diploma/asr_yandex/bert_inference.csv', index=False)
 
 
