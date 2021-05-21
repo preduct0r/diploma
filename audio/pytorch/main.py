@@ -131,11 +131,12 @@ def train(args):
     df_audio = pd.read_csv('/home/den/DATASETS/AUDIO/preprocessed/ramas/meta_test.csv')
     df_audio = df_audio[df_audio['cur_label'].isin(['ang', 'hap', 'sad', 'neu'])]
 
-    temp_df = pd.DataFrame(columns=['audio_name', 'hap', 'ang', 'sad', 'neu'])
+    temp_df = pd.DataFrame(columns=['cur_name', 'hap', 'ang', 'sad', 'neu'])
     temp_df['cur_name'] = output_dict['audio_name']
     temp_df.loc[:, ['hap', 'ang', 'sad', 'neu']] = np.vstack(output_dict['clipwise_output2'])
 
-    concat_df = pd.concat([df_audio, temp_df], axis=1)
+    merge_df = pd.merge(df_audio, temp_df, on='cur_name', how='inner')
+    merge_df.to_csv('/home/den/Documents/diploma/panns/panns_ramas_inference.csv', index=False)
 
 
 
