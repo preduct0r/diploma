@@ -50,6 +50,11 @@ args = argparse.Namespace(
     warmup_steps = 50
 )
 
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum()
+
 
 class ClassierDataset(Dataset):
     def __init__(self, data_path, tokenizer, device="cuda", maxlen=128):
@@ -112,17 +117,18 @@ preds, chunks = [], []
 
 for batch in tqdm(test_dataloader, desc='Evaluating'):
     output = model(batch["x"])
-    preds.append(output['logits'].detach().cpu().numpy().squeeze().tolist())
+    preds.append(softmax(output['logits'].detach().cpu().numpy().squeeze().tolist()))
     chunks += batch["chunk"]
 
-temp_df = pd.DataFrame(columns=["chunk", "pos", "neg"])
-temp_df["chunk"] = chunks
-temp_df.loc[:,["pos", "neg"]] = np.vstack(preds)
-
+# temp_df = pd.DataFrame(columns=["chunk", "pos", "neg"])
+# temp_df["chunk"] = chunks
 asr_simple = pd.read_csv(open(args.test_data))
+asr_simple.loc[:,["pos", "neg"]] = np.vstack(preds)
 
-merge_df = pd.merge(asr_simple, temp_df, on='chunk', how='inner')
-merge_df.to_csv('/home/den/Documents/diploma/asr_yandex/bert_inference.csv', index=False)
+
+
+# asr_simple.loc[:,['pos','neg']] = temp_df.loc[:,['pos','neg']]
+asr_simple.to_csv('/home/den/Documents/diploma/asr_yandex/bert_inference.csv', index=False)
 
 
 
